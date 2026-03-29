@@ -47,16 +47,15 @@ const TOOLS = {
 };
 
 // ─── Navigation ───────────────────────────────────────────
-function showHome() {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('homePage').classList.add('active');
-  loadHistory();
+// Legacy shims — kept as no-ops so any remaining inline calls don't crash
+function showHome() { scrollToSection('home'); }
+function showPage(name) { scrollToSection(name); }
+
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-function showPage(name) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById(name + 'Page').classList.add('active');
-  window.scrollTo(0, 0);
-}
+
 function toggleMenu() {
   const nav = document.getElementById('nav');
   const btn = document.getElementById('hamburger');
@@ -2651,13 +2650,79 @@ if ('serviceWorker' in navigator) {
 // ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// SCROLL SPY
+// ═══════════════════════════════════════════════════════════
+function initScrollSpy() {
+  const sections = document.querySelectorAll('#home, #tools, #about, #privacy, #contact');
+  const navLinks = document.querySelectorAll('.nav-link');
+
+  const setActive = (id) => {
+    navLinks.forEach(a => {
+      const href = a.getAttribute('href');
+      a.classList.toggle('spy-active', href === '#' + id);
+    });
+  };
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) setActive(entry.target.id);
+    });
+  }, {
+    rootMargin: '-30% 0px -65% 0px',
+    threshold: 0
+  });
+
+  sections.forEach(s => observer.observe(s));
+
+  // Eagerly highlight on first load
+  setActive('home');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SCROLL REVEAL
+// ═══════════════════════════════════════════════════════════
+function initScrollReveal() {
+  // Generic .reveal elements (headings, categories, hero)
+  const revealObs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        revealObs.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.reveal').forEach(el => revealObs.observe(el));
+
+  // Staggered tool grid reveal
+  const gridObs = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('grid-visible');
+        gridObs.unobserve(entry.target);
+      }
+    });
+  }, {
+    // On mobile use a lower threshold so cards aren't invisible too long
+    threshold: isMobile() ? 0.03 : 0.1
+  });
+
+  document.querySelectorAll('.tools-grid').forEach(grid => gridObs.observe(grid));
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   loadHistory();
+
   // Scroll-based header shadow
   window.addEventListener('scroll', () => {
     document.getElementById('header').style.boxShadow =
       window.scrollY > 10 ? '0 2px 20px rgba(0,0,0,0.5)' : '';
-  });
+  }, { passive: true });
+
   // Contact form
   const cf = document.getElementById('contactForm');
   if (cf) {
@@ -2667,4 +2732,16 @@ document.addEventListener('DOMContentLoaded', () => {
       cf.reset();
     });
   }
+
+  // Scroll spy + reveal
+  initScrollSpy();
+  initScrollReveal();
+
+  // Wire tool cards (ensure any dynamically added ones also get click handlers)
+  document.querySelectorAll('.tool-card').forEach(card => {
+    if (!card.dataset.wired) {
+      card.addEventListener('click', () => openTool(card.dataset.tool));
+      card.dataset.wired = '1';
+    }
+  });
 });
